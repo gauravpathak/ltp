@@ -93,11 +93,11 @@ static void verify_statx(void)
 
 	/* Check if the kernel populated the atomic limit struct members */
 	if (!(buff->data.stx_mask & STATX_WRITE_ATOMIC))
-		tst_brk(TCONF, "Kernel may be too old to report atomic limits: STATX_WRITE_ATOMIC missing from stx_mask");
+		tst_brk(TCONF, "Kernel may be too old to report atomic limits");
 
 	/* Check if the filesystem supports reporting the atomic write attribute */
 	if (!(buff->data.stx_attributes_mask & STATX_ATTR_WRITE_ATOMIC)) {
-		tst_res(TFAIL, "Inconsistent: stx_mask has STATX_WRITE_ATOMIC but stx_attributes_mask lacks STATX_ATTR_WRITE_ATOMIC");
+		tst_res(TFAIL, "Missing STATX_ATTR_WRITE_ATOMIC in stx_attributes_mask");
 		return;
 	}
 
@@ -112,47 +112,20 @@ static void verify_statx(void)
 			return;
 		}
 
-		tst_brk(TCONF, "STATX_WRITE_ATOMIC unsupported by block dev or filesystem: STATX_ATTR_WRITE_ATOMIC missing from stx_attributes");
+		tst_brk(TCONF, "STATX_WRITE_ATOMIC unsupported by block dev or filesystem");
 	}
 
-	TST_EXP_EXPR(buff->data.stx_atomic_write_unit_min <= buff->data.stx_atomic_write_unit_max,
-			"stx_atomic_write_unit_min(%u) <= stx_atomic_write_unit_max(%u)",
-			buff->data.stx_atomic_write_unit_min, buff->data.stx_atomic_write_unit_max);
-
-	TST_EXP_EXPR(buff->data.stx_atomic_write_segments_max > 0,
-			"stx_atomic_write_segments_max(%u) > 0", buff->data.stx_atomic_write_segments_max);
-
-	TST_EXP_EXPR(buff->data.stx_atomic_write_unit_min > 0 &&
-			!(buff->data.stx_atomic_write_unit_min & (buff->data.stx_atomic_write_unit_min - 1)),
-			"stx_atomic_write_unit_min(%u) is a power of 2",
-			buff->data.stx_atomic_write_unit_min);
-
-	TST_EXP_EXPR(buff->data.stx_atomic_write_unit_max > 0 &&
-			!(buff->data.stx_atomic_write_unit_max & (buff->data.stx_atomic_write_unit_max - 1)),
-			"stx_atomic_write_unit_max(%u) is a power of 2",
-			buff->data.stx_atomic_write_unit_max);
+	TST_EXP_LE_LU(buff->data.stx_atomic_write_unit_min, buff->data.stx_atomic_write_unit_max);
+	TST_EXP_LT_LU(0, buff->data.stx_atomic_write_segments_max);
+	TST_EXP_POW2_LU(buff->data.stx_atomic_write_unit_min);
+	TST_EXP_POW2_LU(buff->data.stx_atomic_write_unit_max);
 
 	if (buff->data.stx_atomic_write_unit_max_opt == 0) {
 		tst_res(TPASS, "stx_atomic_write_unit_max_opt is 0 (no optimized max reported)");
 	} else {
-		if (buff->data.stx_atomic_write_unit_max_opt > buff->data.stx_atomic_write_unit_max) {
-			tst_res(TFAIL, "stx_atomic_write_unit_max_opt (%u) exceeds max (%u)",
-					buff->data.stx_atomic_write_unit_max_opt,
-					buff->data.stx_atomic_write_unit_max);
-		} else if (buff->data.stx_atomic_write_unit_max_opt < buff->data.stx_atomic_write_unit_min) {
-			tst_res(TFAIL, "stx_atomic_write_unit_max_opt (%u) is less than min (%u)",
-					buff->data.stx_atomic_write_unit_max_opt,
-					buff->data.stx_atomic_write_unit_min);
-		} else {
-			tst_res(TPASS, "stx_atomic_write_unit_max_opt (%u) is within valid range [%u, %u]",
-					buff->data.stx_atomic_write_unit_max_opt,
-					buff->data.stx_atomic_write_unit_min,
-					buff->data.stx_atomic_write_unit_max);
-		}
-
-		TST_EXP_EXPR(!(buff->data.stx_atomic_write_unit_max_opt & (buff->data.stx_atomic_write_unit_max_opt - 1)),
-				"stx_atomic_write_unit_max_opt(%u) is a power of 2",
-				buff->data.stx_atomic_write_unit_max_opt);
+		TST_EXP_LE_LU(buff->data.stx_atomic_write_unit_max_opt, buff->data.stx_atomic_write_unit_max);
+		TST_EXP_LE_LU(buff->data.stx_atomic_write_unit_min, buff->data.stx_atomic_write_unit_max_opt);
+		TST_EXP_POW2_LU(buff->data.stx_atomic_write_unit_max_opt);
 	}
 }
 
@@ -191,26 +164,14 @@ static void setup(void)
 		 * Unlike XFS, ext4 has no device-independent (software)
 		 * atomic write mechanism: ext4_atomic_write_init() always
 		 * requires bdev_can_atomic_write() to be true. So without
-		 * device support there is nothing for ext4 to exercise here.
+		 * device support, there is nothing for ext4 to exercise here.
 		 */
 		tst_brk(TCONF,
-			"%s does not support atomic writes (loop devices never do) and ext4 has no software atomic write fallback; set LTP_DEV to a real NVMe/SCSI device, or load scsi_debug",
-			tst_device->dev);
+				"%s lacks atomic writes (no ext4 software fallback); set LTP_DEV to a real NVMe/SCSI device or load scsi_debug",
+				tst_device->dev);
 	}
 
 	if (!dev_has_atomic) {
-		/*
-		 * No hardware atomic write support, but XFS can still
-		 * complete atomic writes via CoW-based out-of-place writes
-		 * (xfs_inode_can_sw_atomic_write()) as long as reflink is
-		 * enabled, independently of the backing device -- this
-		 * works even on a plain loop device, but only since Linux
-		 * v6.16. Force reflink on explicitly rather than relying on
-		 * mkfs.xfs defaults, and skip the device-limit-based block
-		 * size selection below entirely since it doesn't apply here.
-		 * If the running kernel predates v6.16, verify_statx() will
-		 * TCONF on its own once it sees STATX_WRITE_ATOMIC missing.
-		 */
 		tst_res(TINFO,
 			"%s has no atomic write support; relying on XFS's software (CoW-based, reflink) atomic writes instead (requires Linux v6.16+)",
 			tst_device->dev);
@@ -322,7 +283,6 @@ static struct tst_test test = {
 	.min_kver = "6.13",
 	.needs_root = 1,
 	.needs_device = 1,
-	.needs_tmpdir = 1,
 	.mntpoint = MNTPOINT,
 	.bufs = (struct tst_buffers []) {
 		{&buff, .size = sizeof(*buff)},
