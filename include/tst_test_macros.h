@@ -879,6 +879,117 @@ const char *tst_errno_names(char *buf, const int *exp_errs, int exp_errs_cnt);
 #define TST_EXP_EQ_LU_SILENT(VAL_A, VAL_B) \
 	TST_EXP_EQ_SILENT_(VAL_A, #VAL_A, VAL_B, #VAL_B, unsigned long long, "%llu")
 
+/*
+ * TST_EXP_LT_SILENT_() - Internal helper to compare two values, expect A < B.
+ *
+ * @VAL_A: First value to compare.
+ * @SVAL_A: Stringified expression of VAL_A for failure reporting.
+ * @VAL_B: Second value to compare.
+ * @SVAL_B: Stringified expression of VAL_B for failure reporting.
+ * @TYPE: C type used to evaluate and store values (e.g. unsigned long long).
+ * @PFS: printf format specifier matching TYPE (e.g. "%llu").
+ *
+ * Sets TST_PASS to 1 if VAL_A < VAL_B. Otherwise sets TST_PASS to 0 and
+ * reports TFAIL with both evaluated values.
+ */
+#define TST_EXP_LT_SILENT_(VAL_A, SVAL_A, VAL_B, SVAL_B, TYPE, PFS) do {       \
+	TYPE tst_tmp_a__ = VAL_A;                                              \
+	TYPE tst_tmp_b__ = VAL_B;                                              \
+                                                                               \
+	TST_PASS = 0;                                                          \
+                                                                               \
+	if (tst_tmp_a__ >= tst_tmp_b__) {                                      \
+		tst_res_(__FILE__, __LINE__, TFAIL,                            \
+			SVAL_A " (" PFS ") >= " SVAL_B " (" PFS ")",           \
+			tst_tmp_a__, tst_tmp_b__);                             \
+	} else {                                                               \
+		TST_PASS = 1;                                                  \
+	}                                                                      \
+} while (0)
+
+/**
+ * TST_EXP_LT_LU() - Compare two unsigned long long values, expect A < B.
+ *
+ * @VAL_A: unsigned long long value A.
+ * @VAL_B: unsigned long long value B.
+ *
+ * Reports a pass if A < B and a fail otherwise.
+ */
+#define TST_EXP_LT_LU(VAL_A, VAL_B) do {                                              \
+	TST_EXP_LT_SILENT_(VAL_A, #VAL_A, VAL_B, #VAL_B, unsigned long long, "%llu"); \
+                                                                                      \
+	if (TST_PASS) {                                                               \
+		tst_res_(__FILE__, __LINE__, TPASS,                                   \
+			#VAL_A " < " #VAL_B " (%llu < %llu)",                         \
+			(unsigned long long)VAL_A, (unsigned long long)VAL_B);        \
+	}                                                                             \
+} while (0)
+
+/**
+ * TST_EXP_LT_LU_SILENT() - Compare two unsigned long long values, silent variant.
+ *
+ * @VAL_A: unsigned long long value A.
+ * @VAL_B: unsigned long long value B.
+ *
+ * Unlike TST_EXP_LT_LU() does not print :c:enum:`TPASS <tst_res_flags>` on
+ * success, only prints :c:enum:`TFAIL <tst_res_flags>` on failure.
+ */
+#define TST_EXP_LT_LU_SILENT(VAL_A, VAL_B) \
+	TST_EXP_LT_SILENT_(VAL_A, #VAL_A, VAL_B, #VAL_B, unsigned long long, "%llu")
+
+/*
+ * TST_EXP_POW2_SILENT_() - Internal helper to check if a value is a power of 2.
+ *
+ * @VAL: Value to check.
+ * @SVAL: Stringified expression of VAL for failure reporting.
+ * @TYPE: C type used to evaluate and store VAL (e.g. unsigned long long).
+ * @PFS: printf format specifier matching TYPE (e.g. "%llu").
+ *
+ * Sets TST_PASS to 1 if VAL is a non-zero power of 2. Otherwise sets
+ * TST_PASS to 0 and reports TFAIL.
+ */
+#define TST_EXP_POW2_SILENT_(VAL, SVAL, TYPE, PFS) do {                        \
+	TYPE tst_tmp__ = VAL;                                                  \
+                                                                               \
+	TST_PASS = 0;                                                          \
+                                                                               \
+	if (tst_tmp__ == 0 || (tst_tmp__ & (tst_tmp__ - 1)) != 0) {            \
+		tst_res_(__FILE__, __LINE__, TFAIL,                            \
+			SVAL " (" PFS ") is not a power of 2",                 \
+			tst_tmp__);                                            \
+	} else {                                                               \
+		TST_PASS = 1;                                                  \
+	}                                                                      \
+} while (0)
+
+/**
+ * TST_EXP_POW2_LU() - Check if an unsigned long long value is a power of 2.
+ *
+ * @VAL: unsigned long long value to check.
+ *
+ * Reports a pass if VAL is a power of 2 (and non-zero) and a fail otherwise.
+ */
+#define TST_EXP_POW2_LU(VAL) do {                                              \
+	TST_EXP_POW2_SILENT_(VAL, #VAL, unsigned long long, "%llu");           \
+                                                                               \
+	if (TST_PASS) {                                                        \
+		tst_res_(__FILE__, __LINE__, TPASS,                            \
+			#VAL " (%llu) is a power of 2",                        \
+			(unsigned long long)VAL);                              \
+	}                                                                      \
+} while (0)
+
+/**
+ * TST_EXP_POW2_LU_SILENT() - Check if an unsigned long long value is a power of 2, silent variant.
+ *
+ * @VAL: unsigned long long value to check.
+ *
+ * Unlike TST_EXP_POW2_LU() does not print :c:enum:`TPASS <tst_res_flags>` on
+ * success, only prints :c:enum:`TFAIL <tst_res_flags>` on failure.
+ */
+#define TST_EXP_POW2_LU_SILENT(VAL) \
+	TST_EXP_POW2_SILENT_(VAL, #VAL, unsigned long long, "%llu")
+
 /**
  * TST_EXP_EQ_SZ() - Compare two size_t values.
  *
